@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      UserRole @default(CASHIER)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sales       Sale[]
+  adjustments InventoryAdjustment[]
+}
+
+enum UserRole {
+  OWNER
+  MANAGER
+  CASHIER
+}
+
+model Location {
+  id        String   @id @default(uuid())
+  name      String
+  code      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  products       Product[]
+  inventory      Inventory[]
+  transfersFrom  Transfer[] @relation("TransferFrom")
+  transfersTo    Transfer[] @relation("TransferTo")
+  sales          Sale[]
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  sku         String
+  name        String
+  description String?
+  price       Float
+  cost        Float?
+  barcode     String?  @unique
+  active      Boolean  @default(true)
+  locationId  String
+  location    Location @relation(fields: [locationId], references: [id])
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  inventory Inventory[]
+  saleItems SaleItem[]
+}
+
+model Inventory {
+  id        String   @id @default(uuid())
+  productId String
+  product   Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  locationId String
+  location  Location @relation(fields: [locationId], references: [id])
+  quantity  Int      @default(0)
+  lowStockThreshold Int @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  adjustments InventoryAdjustment[]
+
+  @@unique([productId, locationId])
+}
+
+model InventoryAdjustment {
+  id         String              @id @default(uuid())
+  inventoryId String
+  inventory  Inventory           @relation(fields: [inventoryId], references: [id], onDelete: Cascade)
+  quantity   Int
+  reason     AdjustmentReason
+  notes      String?
+  userId     String
+  user       User                @relation(fields: [userId], references: [id])
+  createdAt  DateTime            @default(now())
+}
+
+enum AdjustmentReason {
+  STOCK_TAKE
+  DAMAGE
+  RETURN
+  TRANSFER
+  MANUAL
+}
+
+model Transfer {
+  id           String   @id @default(uuid())
+  fromLocationId String
+  fromLocation Location @relation("TransferFrom", fields: [fromLocationId], references: [id])
+  toLocationId String
+  toLocation   Location @relation("TransferTo", fields: [toLocationId], references: [id])
+  status       TransferStatus @default(PENDING)
+  requestedAt  DateTime @default(now())
+  approvedAt   DateTime?
+  completedAt  DateTime?
+
+  items TransferItem[]
+}
+
+enum TransferStatus {
+  PENDING
+  APPROVED
+  IN_TRANSIT
+  COMPLETED
+  REJECTED
+}
+
+model TransferItem {
+  id         String    @id @default(uuid())
+  transferId String
+  transfer   Transfer  @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  productId  String
+  quantity   Int
+  receivedQuantity Int @default(0)
+}
+
+model Sale {
+  id           String   @id @default(uuid())
+  invoiceNumber String  @unique
+  locationId   String
+  location     Location @relation(fields: [locationId], references: [id])
+  userId       String
+  user         User     @relation(fields: [userId], references: [id])
+  subtotal     Float
+  tax          Float    @default(0)
+  discount     Float    @default(0)
+  total        Float
+  paymentMethod PaymentMethod
+  status       SaleStatus @default(COMPLETED)
+  createdAt    DateTime @default(now())
+
+  items SaleItem[]
+}
+
+enum PaymentMethod {
+  CASH
+  CARD
+  QRIS
+  DEBIT
+}
+
+enum SaleStatus {
+  COMPLETED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  VOID
+}
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  sale      Sale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  productId String
+  product   Product @relation(fields: [productId], references: [id])
+  quantity  Int
+  price     Float
+  subtotal  Float
+}
+
+model Customer {
+  id        String   @id @default(uuid())
+  name      String
+  phone     String?  @unique
+  email     String?  @unique
+  points    Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
